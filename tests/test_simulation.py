@@ -41,8 +41,8 @@ def test_unconnected_nodes():
     # Then, we launch the simulation:
     sim_ret = simulate_network(
         topology, num_runs=10, stime_limit=10e6,
-        operability=exponential(mean_operability),
-        repair=exponential(mean_repair))
+        failure_interval=exponential(mean_operability),
+        repair_interval=exponential(mean_repair))
 
     # Finally, we compare the collected data:
     assert np.allclose(analytic_p, sim_ret.num_failed_stationary_distribution)
