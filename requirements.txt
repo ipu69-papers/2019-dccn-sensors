@@ -1,3 +1,5 @@
 numpy>=1.17.2
 pytest>=5.2.1
+networkx>=2.3
+matplotlib>=3.1.1
 -e git+https://github.com/larioandr/pydesim.git@v0.1.5#egg=pydesim

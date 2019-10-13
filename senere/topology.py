@@ -1,4 +1,5 @@
 from collections import namedtuple
+import networkx as nx
 
 import numpy as np
 
@@ -36,6 +37,110 @@ class Topology:
     @property
     def connections(self):
         return self.__connections_manager
+
+    def get_connections_graph(self):
+        graph = nx.DiGraph()
+        nodes = self.nodes.values(['address', 'type', 'x', 'y', 'radio_range'])
+        graph.add_nodes_from((n['address'], n) for n in nodes)
+        graph.add_edges_from(self.connections.all())
+        return graph
+
+    def get_neighbours_graph(self):
+        graph = nx.Graph()
+        nodes = self.nodes.values(['address', 'type', 'x', 'y', 'radio_range'])
+        graph.add_nodes_from((n['address'], n) for n in nodes)
+        nodes_list = graph.nodes()
+        for address_a, adj_list in self.neighbours().items():
+            for address_b in adj_list:
+                node_a, node_b = nodes_list[address_a], nodes_list[address_b]
+                graph.add_edge(node_a, node_b)
+        return graph
+
+    def draw(self, **kwargs):
+        """Draw a topology graph using NetworkX and Matplotlib.
+
+        Draw the graph with Matplotlib and NetworkX with nodes with fixed
+        positions, and optional edges for connections and/or for
+        neighbours.
+
+        All styling attributes are optional. If not provided, defaults
+        from :func:`senere.options.defaults` are used.
+
+        Other Parameters
+        ----------------
+        sensor_color : color string, optional
+            Color of the nodes with ``type='sensor'``
+
+        gateway_color : color string, optional
+            Color of the nodes with ``type='gateway'``
+
+        draw_conn_edges : bool, optional (default=True)
+            Flag indicating whether to draw edges between connected nodes
+
+        draw_neigh_edges : bool, optional (default=False)
+            Flag indicating whether to draw edges between neighbour nodes
+
+        conn_line_width : integer, optional
+            Line width of the edges representing connections
+
+        conn_line_style : string, optional
+            Line style of the edges representing connections
+            (solid|dashed|dotted,dashdot)
+
+        neigh_line_width : integer, optional
+            Line width of the edges representing neighbourhood relation
+
+        neigh_line_style : string, optional
+            Line style of the edges representing neighbourhood relation
+            (solid|dashed|dotted,dashdot)
+        """
+        conn_graph = self.get_connections_graph()
+        node_list = conn_graph.nodes(data=True)
+
+        # Assigning positions:
+        positions = {node: (attr['x'], attr['y']) for node, attr in node_list}
+
+        # Assigning colors:
+        colors_dict = {
+            SENSOR_NODE: kwargs.get('sensor_color', defaults['sensor_color']),
+            GATEWAY_NODE: kwargs.get('gateway_color', defaults['gateway_color'])
+        }
+        colors = [colors_dict[attrs['type']] for _, attrs in node_list]
+
+        # Build a new graph:
+        graph = nx.MultiGraph()
+        graph.add_nodes_from(node_list)
+
+        if kwargs.get('draw_conn_edges', True):
+            style = kwargs.get('conn_line_style', defaults['conn_line_style'])
+            width = kwargs.get('conn_line_width', defaults['conn_line_width'])
+            graph.add_edges_from(conn_graph.edges(), style=style, width=width)
+
+        if kwargs.get('draw_neigh_edges', False):
+            style = kwargs.get('neigh_line_style', defaults['neigh_line_style'])
+            width = kwargs.get('neigh_line_width', defaults['neigh_line_width'])
+            neighbour_edges = []
+            neighbours = self.neighbours()
+            for node, adj in neighbours.items():
+                neighbour_edges.extend((node, neighbour) for neighbour in adj)
+            graph.add_edges_from(neighbour_edges, style=style, width=width)
+
+        edges_attrs = [e[-1] for e in graph.edges(data=True)]
+        style = [e['style'] for e in edges_attrs]
+        width = [e['width'] for e in edges_attrs]
+        nx.draw_networkx(graph, positions, node_color=colors, style=style,
+                         width=width)
+
+    def neighbours(self):
+        nodes = self.nodes.all()
+        neighbours = {node.address: [] for node in nodes}
+        for i, node_a in enumerate(nodes):
+            for node_b in nodes[i+1:]:
+                if distance_between(node_a, node_b) <= min(
+                        node_a.radio_range, node_b.radio_range):
+                    neighbours[node_a.address].append(node_b.address)
+                    neighbours[node_b.address].append(node_a.address)
+        return neighbours
 
     def __str__(self):
         nodes = '\n'.join(
@@ -85,6 +190,12 @@ class NodesManager:
         if order_by is not None:
             nodes.sort(key=(lambda node: getattr(node, order_by)))
         return nodes
+
+    def values(self, keys, order_by=None, flat=False):
+        nodes = self.all(order_by)
+        if flat and len(keys) == 1:
+            return [getattr(node, keys[0]) for node in nodes]
+        return [{key: getattr(node, key) for key in keys} for node in nodes]
 
     def get(self, address):
         return self.__owner._nodes[address]
