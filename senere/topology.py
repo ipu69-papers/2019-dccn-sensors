@@ -164,10 +164,17 @@ class NodesManager:
     def owner(self):
         return self.__owner
 
-    def add(self, address, node_type, x, y, **kwargs):
-        radio_range = kwargs.get('radio_range', defaults['radio_range'])
+    def add(self, address, node_type, x, y, radio_range=None):
+        radio_range = radio_range or defaults['radio_range']
         node = Node(address, node_type, x, y, radio_range)
         self.__owner._nodes[address] = node
+
+    def add_from(self, sequence):
+        for record in sequence:
+            if hasattr(record, 'keys'):
+                self.add(**record)
+            else:
+                self.add(*record)
 
     def remove(self, address):
         try:
@@ -270,6 +277,13 @@ class ConnectionsManager:
         else:
             raise ValueError(f'nodes {from_addr} and {to_addr} '
                              f'can not be connected')
+
+    def add_from(self, sequence):
+        for record in sequence:
+            if hasattr(record, 'keys'):
+                self.add(**record)
+            else:
+                self.add(*record)
 
     def remove(self, from_addr):
         try:
