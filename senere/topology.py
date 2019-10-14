@@ -9,7 +9,34 @@ SENSOR_NODE = 'sensor'
 GATEWAY_NODE = 'gateway'
 
 
-Node = namedtuple('Node', ('address', 'type', 'x', 'y', 'radio_range'))
+# Node = namedtuple('Node', ('address', 'type', 'x', 'y', 'radio_range'))
+
+# noinspection PyShadowingBuiltins
+class Node:
+    def __init__(self, address, type=SENSOR_NODE, x=0, y=0,
+                 radio_range=None):
+        self.address = address
+        self.type = type
+        self.x = x
+        self.y = y
+        self.radio_range = radio_range or defaults['radio_range']
+
+    def __str__(self):
+        return f'{self.type}({self.address} @ {self.x:.2f},{self.y:.2f} ' \
+               f'R={self.radio_range:.2f})'
+
+    def __repr__(self):
+        return str(self)
+
+    def __iter__(self):
+        for val in (self.address, self.type, self.x, self.y, self.radio_range):
+            yield val
+
+    def __eq__(self, other):
+        return tuple(self) == tuple(other)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
 
 def position_of(node):
@@ -141,6 +168,27 @@ class Topology:
                     neighbours[node_a.address].append(node_b.address)
                     neighbours[node_b.address].append(node_a.address)
         return neighbours
+
+    def shift_addresses(self, offset: int):
+        # Update nodes:
+        for node in self.nodes.all():
+            node.address += offset
+
+        # Update nodes table:
+        new_nodes = {
+            addr + offset: node for addr, node in self._nodes.items()}
+        self._nodes = new_nodes
+
+        # Update connections:
+        new_connections = {
+            from_addr + offset: to_addr + offset
+            for from_addr, to_addr in self._connections.items()}
+        self._connections = new_connections
+
+    def shift_pos(self, dx, dy):
+        for node in self.nodes.all():
+            node.x += dx
+            node.y += dy
 
     def __str__(self):
         nodes = '\n'.join(
