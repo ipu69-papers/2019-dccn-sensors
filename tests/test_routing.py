@@ -90,6 +90,45 @@ def test_static_routing_ignores_cycles():
     assert RouteRecord(5, 1, 1, 1, True) in routes
 
 
+def test_build_static_routes_with_excluded_nodes():
+    """Check that if we disable nodes, static routes won't use them.
+
+    Topology:
+    ```
+                            [1]<--------+
+                                        |
+     (7)........(2)<-X    X->(6)       (4)<-+
+                                            |
+                (3) -----------------> (5)--+
+    ```
+
+    Sensor #3 can reach sensors 2, 6, and 5.
+    After we turn off sensors #2 and #6, sensors #3 and #7 won't be connected.
+    """
+    topology = Topology()
+    topology.nodes.add(1, GATEWAY_NODE, x=15, y=0, radio_range=11)
+    topology.nodes.add(2, SENSOR_NODE, x=10, y=5, radio_range=11)
+    topology.nodes.add(3, SENSOR_NODE, x=10, y=10, radio_range=11)
+    topology.nodes.add(4, SENSOR_NODE, x=20, y=5, radio_range=11)
+    topology.nodes.add(5, SENSOR_NODE, x=20, y=10, radio_range=11)
+    topology.nodes.add(6, SENSOR_NODE, x=15, y=5, radio_range=11)
+    topology.nodes.add(7, SENSOR_NODE, x=0, y=5, radio_range=11)
+    topology.connections.add_from([
+        (2, 1), (6, 1), (4, 1), (3, 2), (7, 2), (5, 4)
+    ])
+
+    routes = build_static_routes(topology)
+    assert len(routes) == 7
+    assert RouteRecord(3, 2, 1, 2, True) in routes
+    assert RouteRecord(7, 2, 1, 2, True) in routes
+
+    routes = build_static_routes(topology, exclude=[2, 6])
+    assert len(routes) == 3
+    assert RouteRecord(1, 1, 1, 0, True) in routes
+    assert RouteRecord(4, 1, 1, 1, True) in routes
+    assert RouteRecord(5, 4, 1, 2, True) in routes
+
+
 #
 # TEST DYNAMIC ROUTING
 #

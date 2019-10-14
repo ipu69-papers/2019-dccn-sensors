@@ -64,8 +64,12 @@ RouteRecord = namedtuple('RouteRecord', ['source', 'next_hop', 'gateway',
                                          'distance', 'static'])
 
 
-def build_static_routes(topology):
+def build_static_routes(topology, exclude=None):
+    exclude = exclude or []
     nodes = topology.nodes.values(['address', 'type'])
+
+    # Filter excluded nodes:
+    nodes = [n for n in nodes if n['address'] not in exclude]
     gateways = [n['address'] for n in nodes if n['type'] == GATEWAY_NODE]
 
     # Build a precursors dictionary:
@@ -73,7 +77,8 @@ def build_static_routes(topology):
     precursors = {n['address']: [] for n in nodes}
     for conn in topology.connections.all():
         from_addr, to_addr = conn
-        precursors[to_addr].append(from_addr)
+        if from_addr not in exclude and to_addr not in exclude:
+            precursors[to_addr].append(from_addr)
 
     # We will also need to store which node is connected to which gateway:
     gateway_dict = {
@@ -217,16 +222,18 @@ class RoutingManager:
 
 
 class Network:
+    STATIC = 'static'
+    DYNAMIC = 'dynamic'
+
     def __init__(self, topology):
         self.__topology = topology
         self.devices = {
             node.address: create_device(node) for node in topology.nodes.all()
         }
-        self.next_hop = {}
-        self.distance = {}
-        # Building a network graph:
-        self.graph = nx.DiGraph()
-        self.graph.add_nodes_from(self.devices.keys())
+        self.__routing_manager = RoutingManager(self)
+
+        # Initiating routing table:
+        self._table = {address: None for address in self.devices.keys()}
 
     @property
     def topology(self):
@@ -238,30 +245,38 @@ class Network:
     def gateways(self):
         return [a for a, d in self.devices.items() if isinstance(d, Gateway)]
 
-    def connect(self):
+    def turned_off(self):
+        return [a for a, d in self.devices.items() if d.turned_off]
+
+    @property
+    def routing_table(self):
+        return self.__routing_manager
+
+    def build_routing_table(self, mode=STATIC):
         """Connect nodes to gates via either shortest paths or static routes.
         """
-        connections = self.topology.connections.all()
-        if connections:
-            for conn in connections:
-                if (self.devices[conn[0]].turned_on and
-                        self.devices[conn[1]].turned_on):
-                    self.next_hop[conn[0]] = conn[1]
-                    self.graph.add_edge(conn[0], conn[1])
-            self._update_distances()
+        route_builder = {
+            Network.STATIC: build_static_routes,
+            Network.DYNAMIC: build_routes,
+        }
+        routes = route_builder[mode](self.__topology, exclude=self.turned_off())
+        for route in routes:
+            self.routing_table.add(route)
 
     def turn_off(self, address):
         """Turn node off and remove all its connections.
         """
-        precursors = [fa for fa, na in self.next_hop.items() if na == address]
-        for fa in precursors:
-            self.graph.remove_edge(fa, address)
-            self.next_hop[fa] = None
-        if self.next_hop[address] is not None:
-            self.graph.remove_edge(address, self.next_hop[address])
-        self.next_hop[address] = None
         self.devices[address].turn_off()
-        self._update_distances()
+        # Removing all routes going through this device:
+        queue = deque([address])
+        unconnected_nodes = []
+        while queue:
+            node = queue.popleft()
+            unconnected_nodes.append(node)
+            self.routing_table.remove(node)
+            for route in self.routing_table.all():
+                if route.next_hop in unconnected_nodes:
+                    queue.append(route.address)
 
     def turn_on(self, target):
         """Turn one or multiple nodes on.
@@ -271,19 +286,8 @@ class Network:
                 self.devices[address].turn_on()
         except TypeError:
             self.devices[target].turn_on()
-        self.connect()
 
     def get_offline_nodes(self):
         """Get a list of all nodes either turned off or lost their connections.
         """
-        return [addr for addr, d in self.distance.items() if d == np.inf]
-
-    def _update_distances(self):
-        gateways = self.gateways()
-        devices = list(self.devices.keys())
-        self.distance = {d: np.inf for d in devices}
-        for gw in gateways:
-            spl = dict(nx.single_target_shortest_path_length(self.graph, gw))
-            for d in devices:
-                if d in spl and self.distance[d] > spl[d]:
-                    self.distance[d] = spl[d]
+        return [addr for addr, route in self._table if route is None]

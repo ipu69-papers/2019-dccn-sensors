@@ -319,5 +319,52 @@ class ConnectionsManager:
 #
 # Topology generators:
 #
-def build_tree_topology(depth, num_trees=1):
-    pass
+# noinspection PyPep8Naming
+def build_tree_topology(depth, arity=1, dx=10, dy=10, dt=20, roe=0.1):
+    D, A = depth, arity
+
+    # Compute distances between nodes at d-th level:
+    delta_x = np.zeros(D + 1)
+    delta_x[D] = dx
+    for d in range(D - 1, -1, -1):
+        delta_x[d] = delta_x[d + 1] * A
+
+    # Compute X-width of children in a subtree at d-th level:
+    width = (A - 1) * delta_x
+
+    # Compute number of nodes at d-th level:
+    num_nodes = np.zeros(D + 1, dtype=int)
+    num_nodes[0] = 1
+    for d in range(1, D + 1):
+        num_nodes[d] = num_nodes[d - 1] * A
+
+    # Compute nodes coordinates:
+    pos_x = list(np.zeros(num_nodes[d]) for d in range(D + 1))
+    pos_y = np.zeros(D + 1)
+    for d in range(D, -1, -1):
+        offset = 0 if d == D else pos_x[d + 1][0] + 0.5 * width[d + 1]
+        x_intervals = [offset] + [delta_x[d]] * (num_nodes[d] - 1)
+        pos_x[d] = np.cumsum(x_intervals)
+        pos_y[d] = 0 if d == D else pos_y[d + 1] + dy
+
+    # Compute radio ranges for each level:
+    R = (1 + roe) * np.sqrt((width/2) ** 2 + dy ** 2)
+
+    # Compute addresses of the leftmost node at each level:
+    first_address = np.cumsum([1] + list(num_nodes))[:-1]
+
+    # Now we can build a topology. We start from the gateway at the root:
+    topology = Topology()
+    topology.nodes.add(1, GATEWAY_NODE, pos_x[0][0], pos_y[0], R[1])
+    address = 2
+    for d in range(1, D + 1):
+        parent = first_address[d - 1]
+        y = pos_y[d]
+        r = max(R[d - 1], R[d])
+        for i in range(num_nodes[d]):
+            if i > 0 and i % A == 0:
+                parent += 1
+            topology.nodes.add(address, SENSOR_NODE, pos_x[d][i], y, r)
+            topology.connections.add(address, parent)
+            address += 1
+    return topology

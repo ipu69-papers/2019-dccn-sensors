@@ -35,7 +35,7 @@ class ModelData(Model):
         # - `static_connections`: optional dictionary with static connections
         # We use it as a template for network creation.
         self.network = Network(sim.params.topology)
-        self.network.connect()
+        self.network.build_routing_table()
         self.repair_started = False
         self.failed_nodes = []
 
@@ -78,7 +78,7 @@ class ModelData(Model):
         so we schedule their failures again.
         """
         self.network.turn_on(self.failed_nodes)
-        self.network.connect()
+        self.network.build_routing_table()
         self.failed_nodes = []
         self.repair_started = False
 
