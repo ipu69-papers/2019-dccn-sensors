@@ -356,6 +356,9 @@ class ConnectionsManager:
     def get_next_hop(self, from_addr):
         return self.owner._connections[from_addr]
 
+    def has_next_hop(self, from_addr):
+        return from_addr in self.owner._connections
+
     def all(self, order_by=None):
         connections = [
             (key, value) for key, value in self.owner._connections.items()]
@@ -450,3 +453,13 @@ def build_forest_topology(num_trees, depth, arity=1, dx=10, dy=10, roe=0.1,
 
     forest = Topology.join(*trees)
     return forest
+
+
+def build_random_topology(num_gateways, num_sensors, radio_range=10.0,
+                          min_distance=2.0, min_gw_distance=20.0,
+                          max_gw_distance=40.0, start_pos=(100.0, 100.0)):
+    gw_positions = []
+    sensor_positions = []
+
+    # 1) Find positions for gateways:
+

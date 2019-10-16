@@ -6,7 +6,8 @@ from numpy.ma import sqrt
 
 from senere.options import defaults
 from senere.topology import Topology, GATEWAY_NODE, SENSOR_NODE, Node, \
-    build_tree_topology, build_forest_topology
+    build_tree_topology, build_forest_topology, build_random_topology, \
+    position_of, distance_between
 
 
 def test_shifting_address():
@@ -168,3 +169,49 @@ def test_forest_topology():
             children_addresses = addr[tree][level+1][(3*index):(3*(index+1))]
             for child_address in children_addresses:
                 assert (child_address, address) in connections
+
+
+@pytest.mark.skip
+@pytest.mark.repeat(1)
+def test_random_topology():
+    min_distance = 1.0
+    radio_range = 5.0
+    num_gateways = 2
+    num_sensors = 6
+    min_gw_distance = 8.0
+    t = build_random_topology(
+        num_gateways=num_gateways, num_sensors=num_sensors,
+        radio_range=radio_range, min_distance=min_distance,
+        min_gw_distance=min_gw_distance)
+
+    assert t.nodes.count() == num_gateways + num_sensors
+    assert t.connections.count() == num_sensors
+
+    # Validate positions:
+    gateways = t.nodes.filter(type=GATEWAY_NODE)
+    all_nodes = t.nodes.all()
+
+    for i, gw_a in enumerate(gateways):
+        for gw_b in gateways[i+1:]:
+            assert distance_between(gw_a, gw_b) >= min_gw_distance
+
+    for i, node_a in enumerate(all_nodes):
+        for node_b in all_nodes[i+1:]:
+            assert distance_between(node_a, node_b) >= min_distance
+
+    # Validate that static routes end in a gateway:
+    visited_nodes = set()
+    for node in all_nodes:
+        path = [node]
+        while t.connections.has_next_hop(node.address):
+            assert node.type == SENSOR_NODE
+            node = t.connections.get_next_hop(node.address)
+            assert node not in path
+            path.append(node)
+
+        # Check that final node (that doesn't have a next hop) is a gate:
+        assert node.type == GATEWAY_NODE
+
+        # Add all nodes to visited
+        for a_node in path:
+            visited_nodes.add(a_node)
