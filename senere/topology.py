@@ -49,10 +49,12 @@ def distance_between(node_a, node_b):
 
 
 class Topology:
-    def __init__(self):
-        self._nodes = {}
+    def __init__(self, nodes=None, connections=None):
+        nodes = nodes or []
+        connections = connections or []
+        self._nodes = {n.address: n for n in nodes}
+        self._connections = {c[0]: c[1] for c in connections}
         self.__nodes_manager = NodesManager(self)
-        self._connections = {}
         self.__connections_manager = ConnectionsManager(self, can_connect=(
             lambda src, dst: (distance_between(src, dst) <=
                               min(src.radio_range, dst.radio_range))))
@@ -189,6 +191,14 @@ class Topology:
         for node in self.nodes.all():
             node.x += dx
             node.y += dy
+
+    @staticmethod
+    def join(*topologies):
+        nodes, connections = [], []
+        for t in topologies:
+            nodes.extend(t.nodes.all())
+            connections.extend(t.connections.all())
+        return Topology(nodes=nodes, connections=connections)
 
     def __str__(self):
         nodes = '\n'.join(
@@ -368,7 +378,7 @@ class ConnectionsManager:
 # Topology generators:
 #
 # noinspection PyPep8Naming
-def build_tree_topology(depth, arity=1, dx=10, dy=10, dt=20, roe=0.1):
+def build_tree_topology(depth, arity=1, dx=10, dy=10, roe=0.1):
     D, A = depth, arity
 
     # Compute distances between nodes at d-th level:
@@ -397,13 +407,19 @@ def build_tree_topology(depth, arity=1, dx=10, dy=10, dt=20, roe=0.1):
 
     # Compute radio ranges for each level:
     R = (1 + roe) * np.sqrt((width/2) ** 2 + dy ** 2)
+    # Since root doesn't have parent, its radio range is the same as for
+    # its children, if depth is greater then zero:
+    R[0] = R[1] if D > 0 else defaults['radio_range']
+    # Only leafs at last level, so their distances should be determined by
+    # connection to parent only:
+    R[D] = R[D - 1]
 
     # Compute addresses of the leftmost node at each level:
     first_address = np.cumsum([1] + list(num_nodes))[:-1]
 
     # Now we can build a topology. We start from the gateway at the root:
     topology = Topology()
-    topology.nodes.add(1, GATEWAY_NODE, pos_x[0][0], pos_y[0], R[1])
+    topology.nodes.add(1, GATEWAY_NODE, pos_x[0][0], pos_y[0], R[0])
     address = 2
     for d in range(1, D + 1):
         parent = first_address[d - 1]
@@ -416,3 +432,21 @@ def build_tree_topology(depth, arity=1, dx=10, dy=10, dt=20, roe=0.1):
             topology.connections.add(address, parent)
             address += 1
     return topology
+
+
+def build_forest_topology(num_trees, depth, arity=1, dx=10, dy=10, roe=0.1,
+                          dt=10):
+    trees = [build_tree_topology(depth, arity, dx, dy, roe)
+             for _ in range(num_trees)]
+
+    for i, tree in enumerate(trees):
+        if i == 0:
+            continue
+        prev_tree = trees[i - 1]
+        address_offset = max(prev_tree.nodes.values(['address'], flat=True))
+        x = max(prev_tree.nodes.values(['x'], flat=True))
+        tree.shift_addresses(address_offset)
+        tree.shift_pos(x + dt, 0)
+
+    forest = Topology.join(*trees)
+    return forest
