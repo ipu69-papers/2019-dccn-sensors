@@ -1,4 +1,4 @@
-from senere.network import build_static_routes, RouteRecord, build_routes
+from senere.routing import build_static_routes, RouteRecord, build_routes
 from senere.topology import Topology, GATEWAY_NODE, SENSOR_NODE
 
 

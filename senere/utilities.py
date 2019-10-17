@@ -38,9 +38,10 @@ class GridArea:
         self._num_empty = 0
         self._area = np.zeros((0, 0))
         self._points = []
+        self._initial_points = []
         # Add points:
         for point in (points or []):
-            self.add(point)
+            self.add(point, initial=True)
 
     @property
     def max_x(self):
@@ -55,12 +56,20 @@ class GridArea:
         return self._area
 
     @property
-    def points(self):
+    def all_points(self):
+        return tuple(self._initial_points) + tuple(self._points)
+
+    @property
+    def added_points(self):
         return self._points
 
     @property
+    def initial_points(self):
+        return self._initial_points
+
+    @property
     def empty(self):
-        return len(self._points) == 0
+        return len(self.all_points) == 0
 
     def add_random_points(self, n=1):
         if self.empty:
@@ -85,26 +94,29 @@ class GridArea:
                 n -= 1
         raise RuntimeError('empty cell not found!')
 
-    def add(self, pos):
+    def add(self, pos, initial=False):
         x0, y0 = pos
+        x0, y0 = int(x0), int(y0)
         if x0 < 0 or y0 < 0:
             raise ValueError('negative coordinates disallowed')
 
         # Only first point may be added to NONE place:
-        if len(self._points) > 0 and (x0 > self.max_x or y0 > self.max_y or
-                                      self._area[x0][y0] != GridArea.EMPTY):
+        if ((len(self._points) > 0 and not initial) and
+                (x0 > self.max_x or y0 > self.max_y or
+                 self._area[x0][y0] != GridArea.EMPTY)):
             raise ValueError(
                 f'adding point to any cell except EMPTY is disallowed when'
                 f'GridArea is not empty')
 
         # Resize the area if needed (checking is performed inside):
-        max_x = max(x0 + self.r_max + 1, self.max_x)
-        max_y = max(y0 + self.r_max + 1, self.max_y)
+        max_x = max(int(x0 + self.r_max) + 1, self.max_x)
+        max_y = max(int(y0 + self.r_max) + 1, self.max_y)
         self.resize(max_x, max_y)
 
         # Mark NONE points inside r_min circle as BUSY:
-        square = product(range(max(0, x0 - self.r_min), x0 + self.r_min + 1),
-                         range(max(0, y0 - self.r_min), y0 + self.r_min + 1))
+        square = product(
+            range(max(0, int(x0 - self.r_min)), int(x0 + self.r_min) + 1),
+            range(max(0, int(y0 - self.r_min)), int(y0 + self.r_min) + 1))
         for x, y in square:
             # skip corner points out of the circle:
             if count_distance((x, y), (x0, y0)) > self.r_min:
@@ -128,8 +140,9 @@ class GridArea:
         self._area[x0][y0] = GridArea.OCCUPIED
 
         # Mark NONE points in a ring between r_min and r_max as EMPTY:
-        square = product(range(max(0, x0 - self.r_max), x0 + self.r_max + 1),
-                         range(max(0, y0 - self.r_max), y0 + self.r_max + 1))
+        square = product(
+            range(max(0, int(x0 - self.r_max)), int(x0 + self.r_max) + 1),
+            range(max(0, int(y0 - self.r_max)), int(y0 + self.r_max) + 1))
         for x, y in square:
             distance = count_distance((x, y), (x0, y0))
             # Skip points not laying inside the ring:
@@ -143,7 +156,10 @@ class GridArea:
                 self._area[x][y] = GridArea.EMPTY
 
         # Finally, add the point to the points list:
-        self._points.append((x0, y0))
+        if initial:
+            self._initial_points.append((x0, y0))
+        else:
+            self._points.append((x0, y0))
 
     def resize(self, max_x, max_y):
         if max_x < self._max_x or max_y < self._max_y:
@@ -164,5 +180,6 @@ class GridArea:
         self._max_y = max_y
 
     def __str__(self):
-        return f'GridArea {self.max_x}x{self.max_y} with {len(self._points)} ' \
-               f'points and {self._num_empty} empty places'
+        return f'GridArea {self.max_x}x{self.max_y} with ' \
+               f'{len(self.all_points)} points and {self._num_empty} ' \
+               f'empty places'

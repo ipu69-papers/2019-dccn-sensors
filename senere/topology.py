@@ -1,15 +1,13 @@
-from collections import namedtuple
 import networkx as nx
 
 import numpy as np
 
 from senere.options import defaults
+from senere.utilities import GridArea
 
 SENSOR_NODE = 'sensor'
 GATEWAY_NODE = 'gateway'
 
-
-# Node = namedtuple('Node', ('address', 'type', 'x', 'y', 'radio_range'))
 
 # noinspection PyShadowingBuiltins
 class Node:
@@ -457,9 +455,33 @@ def build_forest_topology(num_trees, depth, arity=1, dx=10, dy=10, roe=0.1,
 
 def build_random_topology(num_gateways, num_sensors, radio_range=10.0,
                           min_distance=2.0, min_gw_distance=20.0,
-                          max_gw_distance=40.0, start_pos=(100.0, 100.0)):
-    gw_positions = []
-    sensor_positions = []
-
+                          max_gw_distance=40.0, start_pos=(100, 100)):
     # 1) Find positions for gateways:
+    area = GridArea(min_gw_distance, max_gw_distance, [start_pos])
+    area.add_random_points(num_gateways-1)
+    gateways_positions = area.all_points
 
+    # 2) Find positions for sensors:
+    area = GridArea(min_distance, radio_range, gateways_positions)
+    area.add_random_points(num_sensors)
+    sensors_positions = area.added_points
+
+    # 3) Create a topology and add nodes:
+    t = Topology()
+    t.nodes.add_from([
+        {'address': i + 1, 'node_type': GATEWAY_NODE,
+         'x': pos[0], 'y': pos[1], 'radio_range': radio_range
+         } for i, pos in enumerate(gateways_positions)])
+    t.nodes.add_from([
+        {'address': i + num_gateways + 1, 'node_type': SENSOR_NODE,
+         'x': pos[0], 'y': pos[1], 'radio_range': radio_range
+         } for i, pos in enumerate(sensors_positions)])
+
+    # 4) Build shortest paths from gateways:
+    from .routing import build_routes
+    routes = build_routes(t)
+    for route in routes:
+        if route.source != route.gateway:
+            t.connections.add(route.source, route.next_hop)
+
+    return t
