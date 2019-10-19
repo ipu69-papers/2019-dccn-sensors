@@ -31,6 +31,23 @@ def average_pmfs(pmfs):
     return sum(vectors) / num_vectors
 
 
+# noinspection PyProtectedMember
+def average_sample_traces(traces):
+    data = [t._convert(tuple, 'split') for t in traces]
+    orders = [len(record[0]) for record in data]
+    max_order, max_order_index = -1, None
+    for i, curr_order in enumerate(orders):
+        if curr_order > max_order:
+            max_order = curr_order
+            max_order_index = i
+    timestamps = data[max_order_index][0]
+    values = np.zeros(max_order)
+    for i in range(max_order):
+        v = [rec[1][i] for rec, order in zip(data, orders) if i < order]
+        values[i] = np.average(v)
+    return timestamps, values
+
+
 class _SimRet:
     def __init__(self, results):
         _rs = [r.data for r in results]
@@ -38,7 +55,10 @@ class _SimRet:
         self.num_failed_pmf = average_pmfs([r.num_failed.pmf() for r in _rs])
         self.num_offline_pmf = average_pmfs([r.num_offline.pmf() for r in _rs])
         self.operable = sum(r.operable.timeavg() for r in _rs) / n
-
+        self.num_failed_sampled = average_sample_traces(
+            r.num_failed_sampled for r in _rs)
+        self.num_offline_sampled = average_sample_traces(
+            r.num_offline_sampled for r in _rs)
         self.runs = results
 
 
@@ -60,17 +80,26 @@ class ModelData(Model):
         self.num_failed = Trace()
         self.num_offline = Trace()
         self.operable = Trace()
+        self.num_failed_sampled = Trace()
+        self.num_offline_sampled = Trace()
 
         # Record initial trace data:
         t = sim.stime
+        num_offline = len(self.network.get_offline_nodes())
         self.num_failed.record(t, 0)
-        self.num_offline.record(t, len(self.network.get_offline_nodes()))
+        self.num_failed_sampled.record(t, 0)
+        self.num_offline.record(t, num_offline)
+        self.num_offline_sampled.record(t, num_offline)
         self.operable.record(t, 1)
 
         # Build network routes:
         self.network.build_routing_table(self.routing_mode)
         for sensor in self.network.sensors():
             self.schedule_failure(sensor)
+
+        # Check whether we record samples:
+        if sim.params.record_samples:
+            sim.schedule(sim.params.sample_interval, self.handle_sample_timeout)
 
     def handle_failure(self, node):
         """Handle node failure. Upon failure the following actions take place:
@@ -137,6 +166,14 @@ class ModelData(Model):
             self.repair_started = False
             self.operable.record(t, 1)
 
+    def handle_sample_timeout(self):
+        t = self.sim.stime
+        num_offline = len(self.network.get_offline_nodes())
+        self.num_failed_sampled.record(t, len(self.failed_nodes))
+        self.num_offline_sampled.record(t, num_offline)
+        self.sim.schedule(self.sim.params.sample_interval,
+                          self.handle_sample_timeout)
+
     def schedule_failure(self, node):
         """Schedule next failure event for a given node.
 
@@ -185,5 +222,7 @@ def simulate_network(topology, failure_interval, repair_interval,
             'num_offline_till_repair': num_offline_till_repair,
             'log_level': log_level,
             'cons_repair_interval': cons_repair_interval,
+            'record_samples': kwargs.get('record_samples', False),
+            'sample_interval': kwargs.get('sample_interval', 1),
         }))
     return _SimRet(results)

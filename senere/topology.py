@@ -98,13 +98,19 @@ class Topology:
         sensor_color : color string, optional
             Color of the nodes with ``type='sensor'``
 
-        gateway_color : color string, optional
+        gw_color : color string, optional
             Color of the nodes with ``type='gateway'``
 
-        draw_conn_edges : bool, optional (default=True)
+        node_size : float, optional (default=400)
+            Size of nodes
+
+        font_size : int, optional (default=14)
+            Font size for labels
+
+        conn_edges : bool, optional (default=True)
             Flag indicating whether to draw edges between connected nodes
 
-        draw_neigh_edges : bool, optional (default=False)
+        neigh_edges : bool, optional (default=False)
             Flag indicating whether to draw edges between neighbour nodes
 
         conn_line_width : integer, optional
@@ -130,7 +136,7 @@ class Topology:
         # Assigning colors:
         colors_dict = {
             SENSOR_NODE: kwargs.get('sensor_color', defaults['sensor_color']),
-            GATEWAY_NODE: kwargs.get('gateway_color', defaults['gateway_color'])
+            GATEWAY_NODE: kwargs.get('gw_color', defaults['gw_color'])
         }
         colors = [colors_dict[attrs['type']] for _, attrs in node_list]
 
@@ -138,12 +144,12 @@ class Topology:
         graph = nx.MultiGraph()
         graph.add_nodes_from(node_list)
 
-        if kwargs.get('draw_conn_edges', True):
+        if kwargs.get('conn_edges', True):
             style = kwargs.get('conn_line_style', defaults['conn_line_style'])
             width = kwargs.get('conn_line_width', defaults['conn_line_width'])
             graph.add_edges_from(conn_graph.edges(), style=style, width=width)
 
-        if kwargs.get('draw_neigh_edges', False):
+        if kwargs.get('neigh_edges', False):
             style = kwargs.get('neigh_line_style', defaults['neigh_line_style'])
             width = kwargs.get('neigh_line_width', defaults['neigh_line_width'])
             neighbour_edges = []
@@ -159,6 +165,10 @@ class Topology:
         kds = {}
         if 'ax' in kwargs:
             kds['ax'] = kwargs['ax']
+        kds['font_size'] = kwargs.get(
+            'node_font_size', defaults['node_font_size'])
+        kds['node_size'] = kwargs.get(
+            'node_size', defaults['node_size'])
         nx.draw_networkx(graph, positions, node_color=colors, style=style,
                          width=width, **kds)
 
