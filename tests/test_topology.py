@@ -171,7 +171,6 @@ def test_forest_topology():
                 assert (child_address, address) in connections
 
 
-@pytest.mark.skip
 @pytest.mark.repeat(1)
 def test_random_topology():
     min_distance = 1.0
@@ -200,12 +199,12 @@ def test_random_topology():
             assert distance_between(node_a, node_b) >= min_distance
 
     # Validate that static routes end in a gateway:
-    visited_nodes = set()
+    visited_nodes = list()
     for node in all_nodes:
         path = [node]
         while t.connections.has_next_hop(node.address):
             assert node.type == SENSOR_NODE
-            node = t.connections.get_next_hop(node.address)
+            node = t.nodes.get(t.connections.get_next_hop(node.address))
             assert node not in path
             path.append(node)
 
@@ -213,5 +212,5 @@ def test_random_topology():
         assert node.type == GATEWAY_NODE
 
         # Add all nodes to visited
-        for a_node in path:
-            visited_nodes.add(a_node)
+        for a_node in [n for n in path if n not in visited_nodes]:
+            visited_nodes.append(a_node)

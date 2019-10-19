@@ -116,10 +116,9 @@ class Network:
         self.devices = {
             node.address: create_device(node) for node in topology.nodes.all()
         }
-        self.__routing_manager = RoutingManager(self)
-
         # Initiating routing table:
         self._table = {address: None for address in self.devices.keys()}
+        self.__routing_manager = RoutingManager(self)
 
     @property
     def topology(self):
@@ -162,7 +161,7 @@ class Network:
             self.routing_table.remove(node)
             for route in self.routing_table.all():
                 if route.next_hop in unconnected_nodes:
-                    queue.append(route.address)
+                    queue.append(route.source)
 
     def turn_on(self, target):
         """Turn one or multiple nodes on.
@@ -176,4 +175,4 @@ class Network:
     def get_offline_nodes(self):
         """Get a list of all nodes either turned off or lost their connections.
         """
-        return [addr for addr, route in self._table if route is None]
+        return [addr for addr in self.sensors() if addr not in self._table]

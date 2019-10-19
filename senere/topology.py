@@ -155,8 +155,12 @@ class Topology:
         edges_attrs = [e[-1] for e in graph.edges(data=True)]
         style = [e['style'] for e in edges_attrs]
         width = [e['width'] for e in edges_attrs]
+
+        kds = {}
+        if 'ax' in kwargs:
+            kds['ax'] = kwargs['ax']
         nx.draw_networkx(graph, positions, node_color=colors, style=style,
-                         width=width)
+                         width=width, **kds)
 
     def neighbours(self):
         nodes = self.nodes.all()
