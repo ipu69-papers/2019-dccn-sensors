@@ -53,7 +53,10 @@ class _SimRet:
         _rs = [r.data for r in results]
         n = len(_rs)
         self.num_failed_pmf = average_pmfs([r.num_failed.pmf() for r in _rs])
+        self.num_failed_avg = np.average([r.num_failed.timeavg() for r in _rs])
         self.num_offline_pmf = average_pmfs([r.num_offline.pmf() for r in _rs])
+        self.num_offline_avg = np.average(
+            [r.num_offline.timeavg() for r in _rs])
         self.operable = sum(r.operable.timeavg() for r in _rs) / n
         self.num_failed_sampled = average_sample_traces(
             r.num_failed_sampled for r in _rs)
@@ -129,9 +132,10 @@ class ModelData(Model):
         self.sim.logger.debug(f'node {node} failed. {num_failed_nodes} nodes '
                               f'failed, {num_failed_nodes} are offline. '
                               f'Failed nodes: {self.failed_nodes}')
-        if (num_offline_nodes >= self.sim.params.num_offline_till_repair and
-                not self.repair_started):
-            self.schedule_next_repair()
+        if num_offline_nodes >= self.sim.params.num_offline_till_repair:
+            if not self.repair_started:
+                # print(f'num failed node: {num_failed_nodes}, offline: {num_offline_nodes}, start repair')
+                self.schedule_next_repair()
             self.operable.record(self.sim.stime, 0)
 
     def handle_repair_finished(self, node):
@@ -164,6 +168,10 @@ class ModelData(Model):
             self.schedule_next_repair()
         else:
             self.repair_started = False
+
+        if num_offline >= self.sim.params.num_offline_till_repair:
+            self.operable.record(t, 0)
+        else:
             self.operable.record(t, 1)
 
     def handle_sample_timeout(self):
